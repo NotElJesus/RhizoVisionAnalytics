@@ -19,5 +19,6 @@ This will be the official RhizoVision Analytics github to hold all the programs.
 ```
 # Input Image Notes
 - Only tested on grayscale pngs
+- Make sure to get rid of RGB channels
 - Size of image shouldn't matter, it rescales it to grid size
 - Save with an octree depth of 8
