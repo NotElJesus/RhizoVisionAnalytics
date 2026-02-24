@@ -17,3 +17,7 @@ This will be the official RhizoVision Analytics github to hold all the programs.
     └── Sinograms
         └── DESCRIPTION: Sinogram of input image gets put in here
 ```
+# Input Image Notes
+- Only tested on grayscale pngs
+- Size of image shouldn't matter, it rescales it to grid size
+- Save with an octree depth of 8
