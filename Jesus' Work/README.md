@@ -41,4 +41,8 @@ This contains the whole entire ```AMatrix``` class that is used in the program i
 
 The A matrix, also referred to as the *system matrix*, specifies the exact relation between the scanned object and the projection in a mathematical way. Each row expressing a single ray.
 
-## 5) [reconstruction.py]()
+## 5) [reconstruction.py](reconstruction.py)
+
+The *reconstruction.py* python file contains the whole x matrix class which is the unknown image that is getting updated through each iteration. This contains the iterations logic and as well the ability to save the image iterations and keep them as a gif.
+
+## 6) 
