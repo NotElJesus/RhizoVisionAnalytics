@@ -6,6 +6,8 @@ import sys
 import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox
+import threading
+from PIL import Image, ImageTk
 
 
 PROJECT_DIR = os.path.abspath(os.path.dirname(__file__))
@@ -64,6 +66,9 @@ class App(tk.Tk):
         self.sourceloc_var = tk.StringVar(value="30")
         self.detectors_var = tk.StringVar(value="55")
         self.plotmatlab_var = tk.BooleanVar(value=False)  # default False for speed
+        self.result_label = None
+        self.result_image_ref = None
+        self.run_button = None
 
         self._build_ui()
 
@@ -74,7 +79,14 @@ class App(tk.Tk):
         # File picker
         tk.Label(frm, text="Input image:").grid(row=0, column=0, sticky="w")
         tk.Entry(frm, textvariable=self.selected_image_path, width=70).grid(row=0, column=1, padx=8)
-        tk.Button(frm, text="Browse...", command=self.pick_file).grid(row=0, column=2)
+        
+        self.run_button = tk.Button(frm, text="Run Try8", command=self.run)
+        self.run_button.grid(row=row, column=1, sticky="w", pady=8)
+        row += 1
+
+        tk.Label(frm, text="Reconstruction Result:").grid(row=row, column=0, sticky="nw", pady=8)
+        self.result_label = tk.Label(frm, text="No result yet")
+        self.result_label.grid(row=row, column=1, sticky="w", pady=8)
 
         # Parameters
         row = 1
@@ -104,6 +116,25 @@ class App(tk.Tk):
         self.log.insert("end", msg)
         self.log.see("end")
         self.update_idletasks()
+
+    def show_result_image(self):
+        result_path = os.path.join(OUTPUT_DIR, "ABSTestingFred.bmp")
+
+        if not os.path.exists(result_path):
+            self._log(f"Result image not found: {result_path}\n")
+            return
+
+        try:
+            img = Image.open(result_path)
+            img.thumbnail((250, 250))
+            tk_img = ImageTk.PhotoImage(img)
+
+            self.result_label.config(image=tk_img, text="")
+            self.result_label.image = tk_img
+            self.result_image_ref = tk_img
+            self._log("Displayed reconstruction result in GUI.\n")
+        except Exception as e:
+            self._log(f"Failed to display result image: {e}\n")
 
     def pick_file(self):
         path = filedialog.askopenfilename(
@@ -163,6 +194,7 @@ class App(tk.Tk):
         self._log(f"Input: {basename}\n")
         self._log(f"Width={width}, Iterations={iters}, FanAngle={fan_angle}, Sourceloc={sourceloc}, DetRadius={det_radius}\n")
         self._log(f"plotmatlab={plotmatlab}\n")
+        self.run_button.config(state="disabled")
 
         # Run in background thread
         threading.Thread(
@@ -225,9 +257,10 @@ class App(tk.Tk):
             if rc == 0:
                 self._log(f"Check outputs in: {OUTPUT_DIR}\n")
                 self._log(f"Sinograms in: {SINOGRAM_DIR}\n")
-                messagebox.showinfo("Done", "Try8 finished. Check Output/ and Output/Sinograms/")
+                self.after(0, self.show_result_image)
+                self.after(0, lambda: messagebox.showinfo("Done", "Try8 finished. Result displayed in GUI."))
             else:
-                messagebox.showerror("Error", "Try8 failed. See log output.")
+                self.after(0, lambda: messagebox.showerror("Error", "Try8 failed. See log output."))
 
         except Exception as e:
             self._log(f"\n[GUI ERROR] {e}\n")
@@ -242,7 +275,8 @@ class App(tk.Tk):
                     self._log("\n(Restored Try8.py)\n")
             except Exception as e:
                 self._log(f"\n[WARN] Failed to restore Try8.py: {e}\n")
-
+            
+            self.after(0, lambda: self.run_button.config(state="normal"))
 
 if __name__ == "__main__":
     ensure_dirs()
