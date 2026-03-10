@@ -8,7 +8,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox
 import threading
 from PIL import Image, ImageTk
-
+from tkinter import filedialog
 
 PROJECT_DIR = os.path.abspath(os.path.dirname(__file__))
 TRY8_PATH = os.path.join(PROJECT_DIR, "Try8.py")  # same folder as this GUI
@@ -80,6 +80,21 @@ class App(tk.Tk):
         tk.Label(frm, text="Input image:").grid(row=0, column=0, sticky="w")
         tk.Entry(frm, textvariable=self.selected_image_path, width=70).grid(row=0, column=1, padx=8)
         
+        row = 0
+
+        # Input image
+        tk.Label(frm, text="Input image:").grid(row=row, column=0, sticky="w")
+
+        self.image_path = tk.StringVar()
+
+        self.image_entry = tk.Entry(frm, textvariable=self.image_path, width=40)
+        self.image_entry.grid(row=row, column=1, padx=5, pady=5)
+
+        browse_btn = tk.Button(frm, text="Browse", command=self.browse_image)
+        browse_btn.grid(row=row, column=2)
+
+        row += 1
+
         self.run_button = tk.Button(frm, text="Run Try8", command=self.run)
         self.run_button.grid(row=row, column=1, sticky="w", pady=8)
         row += 1
@@ -111,6 +126,17 @@ class App(tk.Tk):
         self.log = tk.Text(self, height=22)
         self.log.pack(fill="both", expand=True, padx=12, pady=10)
         self._log("Ready.\n")
+
+    def browse_image(self):
+        from tkinter import filedialog
+
+        file_path = filedialog.askopenfilename(
+            title="Select input image",
+            filetypes=[("Image files", "*.png *.jpg *.jpeg *.bmp")]
+        )
+
+        if file_path:
+            self.selected_image_path.set(file_path)
 
     def _log(self, msg: str):
         self.log.insert("end", msg)
