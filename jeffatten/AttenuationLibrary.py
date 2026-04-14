@@ -7,6 +7,8 @@ from scipy.signal import medfilt
 class Soundfile:
     def __init__(self,soundfilepath:str):
         self.soundfile,self.samplerate = sf.read(soundfilepath)
+        self.fft = None #Added later in the process
+        self.freq = None
     def save(self,path:str):
         sf.write(path,self.soundfile,self.samplerate)
     @property 
@@ -24,22 +26,52 @@ def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two sou
     else:
         sound1.soundfile = sound1.soundfile[-lag:]
         sound2.soundfile = sound2.soundfile[:sound1.length]
-        
+    max_len = max(sound1.length, sound2.length) #Find which file is longer
+    sound1.soundfile = pad(sound1.soundfile, max_len) #Pad both to same length
+    sound2.soundfile = pad(sound2.soundfile, max_len)
+    
+
+def pad(signal, target_len): #ChatGPT code to pad two signals :)
+    pad_width = target_len - len(signal)
+    if pad_width > 0:
+        if signal.ndim == 1:
+            return np.pad(signal, (0, pad_width))
+        else:  # stereo or multi-channel
+            return np.pad(signal, ((0, pad_width), (0, 0)))
+    return signal
 def get_mag(signal:Soundfile):
     fft = np.fft.rfft(signal.soundfile)
     return 20*np.log10(np.abs(fft))
-def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter = False):
+def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter:bool = False,kernelsize:float=101,minFreq:float=None,maxFreq:float=None,sampleFreq:float = None):
+    #Precorrelated is for if the correlate_soundfiles has already been run on the files, if not it runs it
+    #Filterafter is for whether or not to filter the attenuation after to try to smooth things out
+    #kernelsize controls the size of the kernel for filtering, I think its how many cells it averages over, must be odd
+    #minFreq is the minimum frequency to be considered, everything below that frequency is discarded
+
     if precorrelated == False:
         correlate_soundfiles(InitialSignal,FinalSignal)
     fft_in = np.fft.rfft(InitialSignal.soundfile) #Take fourier of both
     fft_final = np.fft.rfft(FinalSignal.soundfile)
-    
-    mag_in = 20*np.log10(np.abs(fft_in)) #Convert to decibels
-    mag_final = 20*np.log10(np.abs(fft_final))
+    freqs = np.fft.rfftfreq(FinalSignal.length, 1/FinalSignal.samplerate)
+
+    mask = np.ones_like(freqs, dtype=bool)
+    if minFreq is not None:
+        mask &= freqs >= minFreq
+    if maxFreq is not None:
+        mask &= freqs <= maxFreq
+
+    mag_in = 20*np.log10(np.abs(fft_in[mask])) #Convert to decibels
+    mag_final = 20*np.log10(np.abs(fft_final[mask]))
+
+    FinalSignal.freq = freqs[mask]
+    FinalSignal.fft = mag_final
+
     attenuationsraw = mag_final - mag_in
+    
     if filterafter:
-        mag_in_filtered = medfilt(mag_in, kernel_size=101)
-        mag_final_filtered = medfilt(mag_final, kernel_size=101)
-        return mag_final_filtered-mag_in_filtered
+        mag_in_filtered = medfilt(mag_in, kernel_size=kernelsize)
+        mag_final_filtered = medfilt(mag_final, kernel_size=kernelsize)
+        FinalSignal.fft = mag_final_filtered
+        return (mag_final_filtered-mag_in_filtered)
     else:
         return attenuationsraw
