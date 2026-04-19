@@ -8,7 +8,7 @@ import os
 import re
 from PIL import Image
 
-folder = "FirstScan" #Name of folder that holds the files
+folder = "Second" #Name of folder that holds the files
 sourceloudnessfile = "Touching_X.wav" #Name of the file that is recorded right ontop of the piezo, usually called touching
 
 #What this program needs to do is go through each file, calculate the attenuation for each, and then compare
