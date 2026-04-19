@@ -1,7 +1,7 @@
 import numpy as np
 from PIL import Image
 from config import WorkingFolder, OutputFolder, shortfile, Rotations
-from visualization import MakeSinogram
+from rayVisualization import MakeSinogram
 
 # The x matrix should be done after the A matrix is constructed and this is the 
 # class that manages everything related to the x matrix. The x matrix is the unknown 
@@ -88,22 +88,23 @@ class xMatrix:
         
         print(f"Saving final output image")
         self.SaveImage(OutputFolder+f"{shortfile}.bmp")
-        
+
         print(f"Final image saved!")
 
     # Saving Stuff Section
     # Function to save the image and add it to frames to make a gif later
-    def SaveImage(self,filename):
-        output = np.reshape(np.abs(self.xarray).astype(np.int8),(self.ReconstructionWidth,self.ReconstructionWidth))
-        max = np.max(output)
-        if max > 0:
-            scale = 255/max
-        else:
-            scale = 1
-        outputimage = Image.fromarray(np.floor(output*scale).astype(np.int8),"L")
-        self.frames.append(outputimage)
-        outputimage.save(filename)
+    def SaveImage(self, filename):
+        output = np.reshape(np.abs(self.xarray), (self.ReconstructionWidth, self.ReconstructionWidth)).astype(np.float64)
 
+        max_val = np.max(output)
+        if max_val > 0:
+            output = 255.0 * output / max_val
+
+        output_uint8 = np.clip(np.floor(output), 0, 255).astype(np.uint8)
+        outputimage = Image.fromarray(output_uint8, "L")
+        self.frames.append(outputimage.copy())
+        outputimage.save(filename)
+        
     def SaveGif(self,filename=OutputFolder+f"{shortfile}.gif"):
         self.frames[0].save(filename,
                save_all = True, append_images = self.frames[1:],
