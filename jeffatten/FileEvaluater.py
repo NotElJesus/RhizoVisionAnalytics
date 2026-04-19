@@ -14,7 +14,7 @@ sourceloudnessfile = "Touching_X.wav" #Name of the file that is recorded right o
 #What this program needs to do is go through each file, calculate the attenuation for each, and then compare
 files = os.listdir("FirstScan")
 print(files)
-pattern = r'^[A-Za-z]_\d{2}_Y.wav$' #Change the X in this to change which file is selected
+pattern = r'^[A-Za-z]_\d{2}_X.wav$' #Change the X in this to change which file is selected
 
 
 matches = [s for s in files if re.search(pattern, s)] #First get a list of all files that match the format
