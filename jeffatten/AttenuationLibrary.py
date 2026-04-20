@@ -14,7 +14,27 @@ class Soundfile:
     @property 
     def length(self):
         return len(self.soundfile)
+
+class Sinogram:
+    def __init__(self,sourceFile:Soundfile,receiverFiles:list[Soundfile],silenceCapsLengths:float=1):
+        self.sourceAudio:Soundfile = sourceFile #This is the audio file of the source
+        self.receiverAudio:list[Soundfile] = receiverFiles #This is a list of the audio files recorded on the hydrophones
+        self.silenceCapsLengths = silenceCapsLengths #This is how many seconds of silence there were at the start and end of the audio file
+    
         
+class ConstantSinogram(Sinogram):
+    def __init__(self, sourceFile, receiverFiles, silenceCapsLengths = 1):
+        super().__init__(sourceFile, receiverFiles, silenceCapsLengths)        
+
+class StairSinogram(Sinogram):
+    def __init__(self, sourceFile, receiverFiles, silenceCapsLengths = 1,stairFreqHeight:float=500,stairTimeLength:float=0.5,startingFreq:float=2500,numberofSteps:int=1):
+        super().__init__(sourceFile, receiverFiles, silenceCapsLengths) #Was the signal made of steps or was it a constant frequency?
+        self.stairFreq = stairFreqHeight #G H I increased in uniform steps, so this is for that, as in what frequency was each step, they went from 2500 to 3000 to 3500 etc
+        self.stairLength = stairTimeLength #This is how long each step was, in the scans it was uniform so we should't need to worry about varying lengths
+        self.startingFreq = startingFreq #For stairs, this is what the 
+    
+
+  
 def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two soundfile objects and does its best to align them, trying to make the signal start at the same time more precisely than a human could
     correlation = correlate(in1 = sound2.soundfile,in2 = sound1.soundfile,mode="full",method="auto") #Chat describes it as basically sliding a signal against another one and comparing them 
     lags = np.arange(-sound1.length + 1, sound2.length) #Generates a list of all possible lags, including negative values
