@@ -149,6 +149,25 @@ class AMatrix:
     def SaveImage(self,filename = "DefaultA.bmp"):
         self.APicture.save(WorkingFolder + filename)
 
+    def CreateAMatrix(self):
+        self.AMatrix = np.zeros(
+            [self.Detectors * len(self.Rotations), (self.ReconstructionWidth) ** 2],
+            dtype=float
+        )
+
+        if len(self.Rays) == 0:
+            print("WARNING: Rays should be added before running this function")
+
+        for angleNum in range(len(self.Rotations)):
+            self.RotateRaysTo(self.Rotations[angleNum])
+            for ray in range(self.Detectors):
+                self.ClearImage()
+                self.DrawRay(ray)
+                self.AMatrix[angleNum * self.Detectors + ray] = np.asarray(self.APicture, dtype=float).reshape(-1)
+
+        self.AMatrix_Transpose = self.AMatrix.transpose()
+        print(f"Bitmap A Matrix created, with size {self.AMatrix.shape}")
+        
     # Finally making the important matrices for SIRT.
     # CreateAMatrix - This is the mathematical representation of the scanner with what the projections were taken. 
     # The following two are technically matrices in the original algorithm and it still works that way but they were
@@ -156,7 +175,8 @@ class AMatrix:
     # For example, originally a Reconstruction Width of 128 in the original matrices didn't even start the iterations
     # after 30 mins. Now with C/R being in the for of a vector and doing element-wise matrix multiplication, the program
     # can do it in about 30 - 40 seconds on my laptop.
-    # CreateCDiagonal/CreateRDiagonal- The diagonal matrix storing only the diagonals in a vector 
+    # CreateCDiagonal/CreateRDiagonal- The diagonal matrix storing only the diagonals in a vector
+    '''
     def CreateAMatrix(self):
         self.AMatrix = np.zeros([self.Detectors * len(self.Rotations), (self.ReconstructionWidth)**2])
 
@@ -169,14 +189,14 @@ class AMatrix:
                 self.ClearImage()
                 self.DrawRay(ray)
                 # Debug statement: self.APicture.save(f"Workingdir/AMatrixDrawings/Angle{angleNum:10d}Ray{ray:10d}.bmp")
-                self.AMatrix[angleNum*self.Detectors+ray] = np.asarray(self.APicture).reshape(-1)
+                self.AMatrix[angleNum*self.Detectors + ray] = np.asarray(self.APicture).reshape(-1)
 
         print(f"A Matrix created, with a size of {np.shape(self.AMatrix)}")
 
         # Precomputing the transpose of A matrix. 
         self.AMatrix_Transpose = self.AMatrix.transpose()
         print("Transpose of A Matrix calculated")
-    
+    '''
     def CreateCMatrix(self):
         # C is diagonal: C[j] = 1/sum(A[:,j])
         denom = np.sum(self.AMatrix, axis = 0)
