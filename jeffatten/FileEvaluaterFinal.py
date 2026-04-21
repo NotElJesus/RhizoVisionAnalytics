@@ -16,11 +16,11 @@ print(f"Current working dir:{os.getcwd()}, should be in jeffatten folder")
 #Take the attenuation, a higher attenuation means more stuff in between so it should be whiter in the sinogram than the other ones
 
 folder = "SecondScan/Outputs" #Name of folder that holds the files
-sourceloudnessfile = "SecondScan/Outputs/Touchingagain_12_J.wav" #Name of the file that is recorded right ontop of the piezo, usually called touching
+sourceloudnessfile = "SecondScan/Outputs/Touchingagain_12_L.wav" #Name of the file that is recorded right ontop of the piezo, usually called touching
 
 
 files = os.listdir(folder)
-pattern = r'^[A-Za-z]_\d{2}_J.wav$' #Change the last letter in this to change which file is selected
+pattern = r'^[A-Za-z]_\d{2}_L.wav$' #Change the last letter in this to change which file is selected
 print(files)
 
 matches = [s for s in files if re.search(pattern, s)] #First get a list of all files that match the format
@@ -41,7 +41,7 @@ for file in range(len(matches)):
 print(attenuations)
 maxatten = np.max(attenuations) #Find the largest atten
 minatten = np.min(attenuations)
-normalized_attenuations = (attenuations - minatten)/(maxatten-minatten)
+normalized_attenuations = 1 - (attenuations - minatten)/(maxatten-minatten) #The higher attenuation values actually mean less stuff between so we want those to be ba
 
 
 p_low = np.percentile(normalized_attenuations, 5)
@@ -53,8 +53,8 @@ normalized_attenuations = normalized_attenuations ** 1.5   # tweak this
 normalized_attenuations = normalized_attenuations * 255
 
 image_attenuations = np.round(normalized_attenuations).astype(int) #Recale to 0-255 range
-
+print(image_attenuations)
 outputimage = Image.fromarray(np.abs(image_attenuations.astype(np.int8)), "L")
 outputimage.save("Hi.bmp")
 
-np.save("Attenuations_J2.npy",image_attenuations) #Saves for use in reconstruction
+np.save("Attenuations_L3.npy",image_attenuations) #Saves for use in reconstruction

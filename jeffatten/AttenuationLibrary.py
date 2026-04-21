@@ -113,6 +113,11 @@ def calculate_attenuation_at_freq(InitialSignal:Soundfile,FinalSignal:Soundfile,
     
     fft_in = medfilt(np.abs(fft_in),kernel_size=kernelsize) #Smooth out ffts
     fft_final = medfilt(np.abs(fft_final),kernel_size=kernelsize)
+    #plt.semilogx(freqs,20*np.log10(fft_in))
+    plt.semilogx(freqs,20*np.log10(fft_final))
+    
+    plt.legend()
+    plt.show()
     
     mag_in = 20*np.log10(np.abs(fft_in[desiredFreqIndex])) #Convert to decibels and take the loudness at certain value
     mag_final = 20*np.log10(np.abs(fft_final[desiredFreqIndex]))
