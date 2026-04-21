@@ -10,7 +10,7 @@ class Soundfile:
         self.fft = None #Added later in the process
         self.freq = None
     def save(self,path:str):
-        sf.write(path,self.soundfile,self.samplerate)
+        sf.write(path,self.soundfile,self.samplerate) 
     @property 
     def length(self):
         return len(self.soundfile)
@@ -62,7 +62,7 @@ def pad(signal, target_len): #ChatGPT code to pad two signals :)
 def get_mag(signal:Soundfile):
     fft = np.fft.rfft(signal.soundfile)
     return 20*np.log10(np.abs(fft))
-def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter:bool = False,kernelsize:float=101,minFreq:float=None,maxFreq:float=None,sampleFreq:float = None):
+def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter:bool = False,kernelsize:float=101,minFreq:float=None,maxFreq:float=None):
     #Precorrelated is for if the correlate_soundfiles has already been run on the files, if not it runs it
     #Filterafter is for whether or not to filter the attenuation after to try to smooth things out
     #kernelsize controls the size of the kernel for filtering, I think its how many cells it averages over, must be odd
@@ -95,3 +95,25 @@ def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorre
         return (mag_final_filtered-mag_in_filtered)
     else:
         return attenuationsraw
+    
+# Doing this in a jank way, delete this upon review, adding a function to calculate attenuation at a specific frequency
+def calculate_attenuation_at_freq(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter:bool = False,kernelsize:float=101,desiredfreq:float = 1000):
+    #Precorrelated is for if the correlate_soundfiles has already been run on the files, if not it runs it
+    #Filterafter is for whether or not to filter the attenuation after to try to smooth things out
+    #kernelsize controls the size of the kernel for filtering, I think its how many cells it averages over, must be odd
+    #minFreq is the minimum frequency to be considered, everything below that frequency is discarded
+
+    if precorrelated == False:
+        correlate_soundfiles(InitialSignal,FinalSignal)
+    fft_in = np.fft.rfft(InitialSignal.soundfile) #Take fourier of both
+    fft_final = np.fft.rfft(FinalSignal.soundfile)
+    freqs = np.fft.rfftfreq(FinalSignal.length, 1/FinalSignal.samplerate)
+
+    desiredFreqIndex = np.searchsorted(freqs,desiredfreq,side="right") #Find the first index where the freq is greater than the desired frequency
+    
+    fft_in = medfilt(np.abs(fft_in),kernel_size=kernelsize) #Smooth out ffts
+    fft_final = medfilt(np.abs(fft_final),kernel_size=kernelsize)
+    
+    mag_in = 20*np.log10(np.abs(fft_in[desiredFreqIndex])) #Convert to decibels and take the loudness at certain value
+    mag_final = 20*np.log10(np.abs(fft_final[desiredFreqIndex]))
+    return 20*np.log10(fft_in[desiredFreqIndex]/fft_final[desiredFreqIndex])
