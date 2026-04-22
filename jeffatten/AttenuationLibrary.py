@@ -4,6 +4,17 @@ import matplotlib.pyplot as plt
 from scipy.signal import correlate
 from scipy.signal import medfilt, butter, sosfiltfilt
 
+
+def convert_to_decibels(signal:np.array):
+    return 20*np.log10(np.abs(signal))
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    # Design the filter in SOS format
+    sos = butter(order, [lowcut, highcut], btype='bandpass', fs=fs, output='sos')
+    # Apply the filter forward and backward to ensure zero phase shift
+    output = sosfiltfilt(sos, data)
+    return output
+
 class Soundfile:
     def __init__(self,soundfilepath:str):
         self.soundfile,self.samplerate = sf.read(soundfilepath)
@@ -11,17 +22,29 @@ class Soundfile:
         self.freq = None
     def save(self,path:str):
         sf.write(path,self.soundfile,self.samplerate) 
+    def getmag(self):
+        if self.fft is None:
+            self.fft = np.fft.rfft(self.soundfile)
+        return 20*np.log10(np.abs(self.fft))
+    def bandpassFilter(self,lowcut,highcut,order=5):
+        self.soundfile = butter_bandpass_filter(self.soundfile, lowcut, highcut, self.samplerate, order)
     @property 
     def length(self):
         return len(self.soundfile)
-
+    @property
+    def rawFFT(self):
+        return np.fft.rfft(self.soundfile)
+    @property
+    def windowFFT(self):
+        N = self.length
+        window = np.hanning(N)
+        return np.fft.rfft(self.soundfile*window)/N
 class Sinogram:
     def __init__(self,sourceFile:Soundfile,receiverFiles:list[Soundfile],silenceCapsLengths:float=1):
         self.sourceAudio:Soundfile = sourceFile #This is the audio file of the source
         self.receiverAudio:list[Soundfile] = receiverFiles #This is a list of the audio files recorded on the hydrophones
         self.silenceCapsLengths = silenceCapsLengths #This is how many seconds of silence there were at the start and end of the audio file
     
-        
 class ConstantSinogram(Sinogram):
     def __init__(self, sourceFile, receiverFiles, silenceCapsLengths = 1):
         super().__init__(sourceFile, receiverFiles, silenceCapsLengths)        
@@ -32,8 +55,41 @@ class StairSinogram(Sinogram):
         self.stairFreq = stairFreqHeight #G H I increased in uniform steps, so this is for that, as in what frequency was each step, they went from 2500 to 3000 to 3500 etc
         self.stairLength = stairTimeLength #This is how long each step was, in the scans it was uniform so we should't need to worry about varying lengths
         self.startingFreq = startingFreq #For stairs, this is what the 
-    
 
+class AttenCalculators: #These calculate the attenuation over the entire frequency spectrum 
+    def NaiveSubtraction(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #Just subtracting the magnitude of the recieved signal from the input signal
+        correlate_soundfiles(InitialSignal,FinalSignal)
+        if useWindow:#Take fourier of both
+            fft_in = InitialSignal.windowFFT 
+            fft_final = FinalSignal.windowFFT
+        else:
+            fft_in = InitialSignal.rawFFT
+            fft_final = FinalSignal.rawFFT
+        mag_in = convert_to_decibels(fft_in)#Convert to decibels
+        mag_final = convert_to_decibels(fft_final)
+        return mag_final - mag_in
+    def NaiveDivision(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #Just dividing the final signal by the initial signal
+        correlate_soundfiles(InitialSignal,FinalSignal)
+        if useWindow:
+            fft_in = InitialSignal.windowFFT #Take fourier of both
+            fft_final = FinalSignal.windowFFT
+        else:
+            fft_in = InitialSignal.rawFFT
+            fft_final = FinalSignal.rawFFT
+        mag_in = convert_to_decibels(fft_in)#Convert to decibels
+        mag_final = convert_to_decibels(fft_final)
+        return mag_final/mag_in
+    def EstTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #This estimates the transfer function of the system, so how much of the signal gets through at a certain frequency
+        correlate_soundfiles(InitialSignal,FinalSignal)
+        if useWindow:
+            fft_in = InitialSignal.windowFFT #Take fourier of both
+            fft_final = FinalSignal.windowFFT
+        else:
+            fft_in = InitialSignal.rawFFT
+            fft_final = FinalSignal.rawFFT
+        eps = 1e-12 #To avoid division by zero
+        atten = fft_final * np.conj(fft_in) / (np.abs(fft_in)**2 + eps)
+        return convert_to_decibels(atten)
   
 def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two soundfile objects and does its best to align them, trying to make the signal start at the same time more precisely than a human could
     correlation = correlate(in1 = sound2.soundfile,in2 = sound1.soundfile,mode="full",method="auto") #Chat describes it as basically sliding a signal against another one and comparing them 
@@ -51,13 +107,6 @@ def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two sou
     sound2.soundfile = pad(sound2.soundfile, max_len)
 
 
-def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
-    # Design the filter in SOS format
-    sos = butter(order, [lowcut, highcut], btype='bandpass', fs=fs, output='sos')
-    # Apply the filter forward and backward to ensure zero phase shift
-    y = sosfiltfilt(sos, data)
-    return y
-
 def pad(signal, target_len): #ChatGPT code to pad two signals :)
     pad_width = target_len - len(signal)
     if pad_width > 0:
@@ -66,9 +115,7 @@ def pad(signal, target_len): #ChatGPT code to pad two signals :)
         else:  # stereo or multi-channel
             return np.pad(signal, ((0, pad_width), (0, 0)))
     return signal
-def get_mag(signal:Soundfile):
-    fft = np.fft.rfft(signal.soundfile)
-    return 20*np.log10(np.abs(fft))
+
 def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter:bool = False,kernelsize:float=101,minFreq:float=None,maxFreq:float=None):
     #Precorrelated is for if the correlate_soundfiles has already been run on the files, if not it runs it
     #Filterafter is for whether or not to filter the attenuation after to try to smooth things out
@@ -104,18 +151,21 @@ def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorre
         return attenuationsraw
     
 # Doing this in a jank way, delete this upon review, adding a function to calculate attenuation at a specific frequency
-def calculate_attenuation_at_freq(InitialSignal:Soundfile,FinalSignal:Soundfile,precorrelated:bool = False,filterafter:bool = False,kernelsize:float=101,desiredfreq:float = 1000):
+
+
+
+def calculate_attenuation_at_freq(InitialSignal:Soundfile,
+                                  FinalSignal:Soundfile,
+                                  precorrelated:bool = False,
+                                  kernelsize:float=101,
+                                  desiredfreq:float = 1000):
     #Precorrelated is for if the correlate_soundfiles has already been run on the files, if not it runs it
-    #Filterafter is for whether or not to filter the attenuation after to try to smooth things out
     #kernelsize controls the size of the kernel for filtering, I think its how many cells it averages over, must be odd
     #minFreq is the minimum frequency to be considered, everything below that frequency is discarded
-    #These are in radians / s 
     freqsraw = np.fft.rfftfreq(InitialSignal.length,1/FinalSignal.samplerate)
     inraw = np.fft.rfft(InitialSignal.soundfile)
     outraw = np.fft.rfft(FinalSignal.soundfile)
     
-    #InitialSignal.soundfile = butter_bandpass_filter(InitialSignal.soundfile,1500*2*np.pi,3500*2*np.pi,InitialSignal.samplerate,order=2) #Butterworth 2000 to 3000
-    #FinalSignal.soundfile = butter_bandpass_filter(FinalSignal.soundfile,1500*2*np.pi,3500*2*np.pi,FinalSignal.samplerate,order=2)
     InitialSignal.soundfile = butter_bandpass_filter(InitialSignal.soundfile,1500,3500,InitialSignal.samplerate,order=2) #Butterworth 2000 to 3000
     FinalSignal.soundfile = butter_bandpass_filter(FinalSignal.soundfile,1500,3500,FinalSignal.samplerate,order=2)
     if precorrelated == False:
@@ -139,7 +189,6 @@ def calculate_attenuation_at_freq(InitialSignal:Soundfile,FinalSignal:Soundfile,
     #fft_in = medfilt(np.abs(fft_in),kernel_size=kernelsize) #Smooth out ffts
     #fft_final = medfilt(np.abs(fft_final),kernel_size=kernelsize)
     #plt.semilogx(freqs,20*np.log10(fft_in))
-    # Main way thing to see is there a meaningful difference in filtering vs not
     plt.semilogx(freqsraw,inraw,label="in raw")
     plt.semilogx(freqsraw,outraw,label="out raw")
     plt.semilogx(freqsraw,atten_raw,label="atten raw")

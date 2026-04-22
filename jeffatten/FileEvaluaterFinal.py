@@ -23,6 +23,7 @@ sourceloudnessfile = f"SecondScan/Outputs/Touchingagain_12_{scanningletter}.wav"
 files = os.listdir(folder)
 
 matches = []
+#The matches list need to be reversed because the A matrix maker makes it from the bottom raw, while in the lab we started from the top so it needs to be in reverse numeric order
 for i in ["A","B","C","D","E","F"]:
     print(i)
     pattern = r'^[' + i + r']_\d{2}_' + scanningletter + r'.wav'
@@ -30,18 +31,9 @@ for i in ["A","B","C","D","E","F"]:
     templist = [s for s in files if re.search(pattern, s)]
     templist.reverse()
     matches.append(templist)
-#pattern = r'^[A-Za-z]_\d{2}_K.wav$' #Change the last letter in this to change which file is selected
-
-#matches = [s for s in files if re.search(pattern, s)] #First get a list of all files that match the format
-print(matches)
-#The matches list need to be reversed because the A matrix maker makes it from the bottom raw, while in the lab we started from the top so it needs to be in reverse numeric order
-
 
 
 attenuations = []
-print(len(matches))
-ffts = []
-freqs = []
 for filerange in matches:
     tempattenuations = []
     for file in filerange:
@@ -60,14 +52,6 @@ for filerange in matches:
     scaled = np.clip(scaled, 0, 255).astype(np.uint8)
     attenuations.extend(scaled)
 attenuations = np.asarray(attenuations)
-# Percentile clipping + gamma scaling to try to get the center differences to be clearer
-'''
-normalized_attenuations = np.clip(normalized_attenuations, p_low, p_high)
-normalized_attenuations = (normalized_attenuations - p_low) / (p_high - p_low)
-normalized_attenuations = normalized_attenuations ** 1.5   # tweak this
-normalized_attenuations = normalized_attenuations * 255'''
-
-print(scaled)
 outputimage = Image.fromarray(np.abs(attenuations.astype(np.int8)), "L")
 outputimage.save("Hi.bmp")
 
