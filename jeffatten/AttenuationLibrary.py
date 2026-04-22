@@ -20,14 +20,18 @@ class Soundfile:
         self.soundfile,self.samplerate = sf.read(soundfilepath)
         self.fft = None #Added later in the process
         self.freq = None
+        self.isCorrelated = False
     def save(self,path:str):
         sf.write(path,self.soundfile,self.samplerate) 
     def getmag(self):
         if self.fft is None:
             self.fft = np.fft.rfft(self.soundfile)
         return 20*np.log10(np.abs(self.fft))
-    def bandpassFilter(self,lowcut,highcut,order=5):
+    def bandpassFilter(self,lowcut,highcut,order=5): #Runs the filter on itself
         self.soundfile = butter_bandpass_filter(self.soundfile, lowcut, highcut, self.samplerate, order)
+    @property
+    def correlated(self):
+        return self.isCorrelated
     @property 
     def length(self):
         return len(self.soundfile)
@@ -58,7 +62,8 @@ class StairSinogram(Sinogram):
 
 class AttenCalculators: #These calculate the attenuation over the entire frequency spectrum 
     def NaiveSubtraction(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #Just subtracting the magnitude of the recieved signal from the input signal
-        correlate_soundfiles(InitialSignal,FinalSignal)
+        if not InitialSignal.correlated or not FinalSignal.correlated:
+            correlate_soundfiles(InitialSignal,FinalSignal)
         if useWindow:#Take fourier of both
             fft_in = InitialSignal.windowFFT 
             fft_final = FinalSignal.windowFFT
@@ -69,7 +74,8 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
         mag_final = convert_to_decibels(fft_final)
         return mag_final - mag_in
     def NaiveDivision(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #Just dividing the final signal by the initial signal
-        correlate_soundfiles(InitialSignal,FinalSignal)
+        if not InitialSignal.correlated or not FinalSignal.correlated:
+            correlate_soundfiles(InitialSignal,FinalSignal)
         if useWindow:
             fft_in = InitialSignal.windowFFT #Take fourier of both
             fft_final = FinalSignal.windowFFT
@@ -80,7 +86,8 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
         mag_final = convert_to_decibels(fft_final)
         return mag_final/mag_in
     def EstTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #This estimates the transfer function of the system, so how much of the signal gets through at a certain frequency
-        correlate_soundfiles(InitialSignal,FinalSignal)
+        if not InitialSignal.correlated or not FinalSignal.correlated:
+            correlate_soundfiles(InitialSignal,FinalSignal)
         if useWindow:
             fft_in = InitialSignal.windowFFT #Take fourier of both
             fft_final = FinalSignal.windowFFT
@@ -105,7 +112,8 @@ def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two sou
     max_len = max(sound1.length, sound2.length) #Find which file is longer
     sound1.soundfile = pad(sound1.soundfile, max_len) #Pad both to same length
     sound2.soundfile = pad(sound2.soundfile, max_len)
-
+    sound1.isCorrelated = True
+    sound2.isCorrelated = True
 
 def pad(signal, target_len): #ChatGPT code to pad two signals :)
     pad_width = target_len - len(signal)
@@ -151,8 +159,6 @@ def calculate_attenuation(InitialSignal:Soundfile,FinalSignal:Soundfile,precorre
         return attenuationsraw
     
 # Doing this in a jank way, delete this upon review, adding a function to calculate attenuation at a specific frequency
-
-
 
 def calculate_attenuation_at_freq(InitialSignal:Soundfile,
                                   FinalSignal:Soundfile,
