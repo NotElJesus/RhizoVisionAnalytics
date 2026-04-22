@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 from scipy.signal import correlate
 from scipy.signal import medfilt
 
+
+#Testing whether its worth it to use a window or not
 baseline = AL.Soundfile("SecondScan/Outputs/Touchingagain_12_K.wav") #Get the baseline object, making a new one each time because the correlate function changes the object
 measurement = AL.Soundfile("SecondScan/Outputs/A_00_K.wav") #Get the measurement file, should be A_00_X then A_01_X etc.
 
