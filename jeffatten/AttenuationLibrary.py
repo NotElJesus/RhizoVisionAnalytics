@@ -2,7 +2,7 @@ import soundfile as sf
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.signal import correlate
-from scipy.signal import medfilt
+from scipy.signal import medfilt, butter, sosfiltfilt
 
 class Soundfile:
     def __init__(self,soundfilepath:str):
@@ -49,7 +49,14 @@ def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two sou
     max_len = max(sound1.length, sound2.length) #Find which file is longer
     sound1.soundfile = pad(sound1.soundfile, max_len) #Pad both to same length
     sound2.soundfile = pad(sound2.soundfile, max_len)
-    
+
+
+def butter_bandpass_filter(data, lowcut, highcut, fs, order=5):
+    # Design the filter in SOS format
+    sos = butter(order, [lowcut, highcut], btype='bandpass', fs=fs, output='sos')
+    # Apply the filter forward and backward to ensure zero phase shift
+    y = sosfiltfilt(sos, data)
+    return y
 
 def pad(signal, target_len): #ChatGPT code to pad two signals :)
     pad_width = target_len - len(signal)
@@ -102,23 +109,52 @@ def calculate_attenuation_at_freq(InitialSignal:Soundfile,FinalSignal:Soundfile,
     #Filterafter is for whether or not to filter the attenuation after to try to smooth things out
     #kernelsize controls the size of the kernel for filtering, I think its how many cells it averages over, must be odd
     #minFreq is the minimum frequency to be considered, everything below that frequency is discarded
-
+    #These are in radians / s 
+    freqsraw = np.fft.rfftfreq(InitialSignal.length,1/FinalSignal.samplerate)
+    inraw = np.fft.rfft(InitialSignal.soundfile)
+    outraw = np.fft.rfft(FinalSignal.soundfile)
+    
+    #InitialSignal.soundfile = butter_bandpass_filter(InitialSignal.soundfile,1500*2*np.pi,3500*2*np.pi,InitialSignal.samplerate,order=2) #Butterworth 2000 to 3000
+    #FinalSignal.soundfile = butter_bandpass_filter(FinalSignal.soundfile,1500*2*np.pi,3500*2*np.pi,FinalSignal.samplerate,order=2)
+    InitialSignal.soundfile = butter_bandpass_filter(InitialSignal.soundfile,1500,3500,InitialSignal.samplerate,order=2) #Butterworth 2000 to 3000
+    FinalSignal.soundfile = butter_bandpass_filter(FinalSignal.soundfile,1500,3500,FinalSignal.samplerate,order=2)
     if precorrelated == False:
         correlate_soundfiles(InitialSignal,FinalSignal)
-    fft_in = np.fft.rfft(InitialSignal.soundfile) #Take fourier of both
-    fft_final = np.fft.rfft(FinalSignal.soundfile)
-    freqs = np.fft.rfftfreq(FinalSignal.length, 1/FinalSignal.samplerate)
+    Initial_Norm = InitialSignal.soundfile / np.max(np.abs(InitialSignal.soundfile)) #We should make this a function but whatever
+    Final_Norm = FinalSignal.soundfile / np.max(np.abs(FinalSignal.soundfile)) #Normalizing signals
+    N = len(Final_Norm)
+    freqs = np.fft.rfftfreq(N, 1/FinalSignal.samplerate)
+    window = np.hanning(N)
+    fft_in = np.fft.rfft(Initial_Norm*window)/N #Take fourier of both
+    fft_final = np.fft.rfft(Final_Norm*window)/N
 
     desiredFreqIndex = np.searchsorted(freqs,desiredfreq,side="right") #Find the first index where the freq is greater than the desired frequency
-    
-    fft_in = medfilt(np.abs(fft_in),kernel_size=kernelsize) #Smooth out ffts
-    fft_final = medfilt(np.abs(fft_final),kernel_size=kernelsize)
+    eps = 1e-12
+    atten = fft_final * np.conj(fft_in) / (np.abs(fft_in)**2 + eps)
+    atten = 20*np.log10(medfilt(np.abs(atten),kernel_size=kernelsize))
+    atten_raw = outraw * np.conj(inraw) / (np.abs(inraw)**2 + eps)
+    atten_raw = 20*np.log10(medfilt(np.abs(atten_raw),kernel_size=kernelsize))
+    fft_in = np.abs(fft_in)
+    fft_final = np.abs(fft_final)
+    #fft_in = medfilt(np.abs(fft_in),kernel_size=kernelsize) #Smooth out ffts
+    #fft_final = medfilt(np.abs(fft_final),kernel_size=kernelsize)
     #plt.semilogx(freqs,20*np.log10(fft_in))
-    plt.semilogx(freqs,20*np.log10(fft_final))
+    # Main way thing to see is there a meaningful difference in filtering vs not
+    plt.semilogx(freqsraw,inraw,label="in raw")
+    plt.semilogx(freqsraw,outraw,label="out raw")
+    plt.semilogx(freqsraw,atten_raw,label="atten raw")
+    
+    
+    plt.semilogx(freqs,atten,label="atten")
+    print(atten[desiredFreqIndex])
+    plt.semilogx(freqs,20*np.log10(fft_in),label="in")
+    plt.semilogx(freqs,20*np.log10(fft_final),label="out")
+    
+
     
     plt.legend()
     plt.show()
     
     mag_in = 20*np.log10(np.abs(fft_in[desiredFreqIndex])) #Convert to decibels and take the loudness at certain value
     mag_final = 20*np.log10(np.abs(fft_final[desiredFreqIndex]))
-    return 20*np.log10(fft_in[desiredFreqIndex]/fft_final[desiredFreqIndex])
+    return atten[desiredFreqIndex]
