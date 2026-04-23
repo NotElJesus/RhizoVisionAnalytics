@@ -29,6 +29,8 @@ class Soundfile:
         return 20*np.log10(np.abs(self.fft))
     def bandpassFilter(self,lowcut,highcut,order=5): #Runs the filter on itself
         self.soundfile = butter_bandpass_filter(self.soundfile, lowcut, highcut, self.samplerate, order)
+    def smoothout(self,kernelsize=101): #Smooths out the signal
+        self.soundfile = medfilt(self.soundfile, kernel_size=kernelsize)
     @property
     def correlated(self):
         return self.isCorrelated
@@ -60,7 +62,7 @@ class StairSinogram(Sinogram):
         self.stairLength = stairTimeLength #This is how long each step was, in the scans it was uniform so we should't need to worry about varying lengths
         self.startingFreq = startingFreq #For stairs, this is what the 
 
-class AttenCalculators: #These calculate the attenuation over the entire frequency spectrum 
+class AttenCalculators: #These calculate the attenuation over the entire frequency spectrum, returns it raw, doesn't convert to decibels 
     def NaiveSubtraction(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #Just subtracting the magnitude of the recieved signal from the input signal
         if not InitialSignal.correlated or not FinalSignal.correlated:
             correlate_soundfiles(InitialSignal,FinalSignal)
@@ -70,9 +72,7 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
         else:
             fft_in = InitialSignal.rawFFT
             fft_final = FinalSignal.rawFFT
-        mag_in = convert_to_decibels(fft_in)#Convert to decibels
-        mag_final = convert_to_decibels(fft_final)
-        return mag_final - mag_in
+        return fft_final - fft_in
     def NaiveDivision(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #Just dividing the final signal by the initial signal
         if not InitialSignal.correlated or not FinalSignal.correlated:
             correlate_soundfiles(InitialSignal,FinalSignal)
@@ -82,9 +82,7 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
         else:
             fft_in = InitialSignal.rawFFT
             fft_final = FinalSignal.rawFFT
-        mag_in = convert_to_decibels(fft_in)#Convert to decibels
-        mag_final = convert_to_decibels(fft_final)
-        return mag_final/mag_in
+        return fft_final/fft_in
     def EstTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,useWindow:bool=False): #This estimates the transfer function of the system, so how much of the signal gets through at a certain frequency
         if not InitialSignal.correlated or not FinalSignal.correlated:
             correlate_soundfiles(InitialSignal,FinalSignal)
@@ -96,7 +94,27 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
             fft_final = FinalSignal.rawFFT
         eps = 1e-12 #To avoid division by zero
         atten = fft_final * np.conj(fft_in) / (np.abs(fft_in)**2 + eps)
-        return convert_to_decibels(atten)
+        return atten
+    def ScalarizeTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,desiredFreq:float,useWindow:bool=False,kernelSize:int=None): #This takes the transfer function and scalarizes it to a single value, which is the attenuation at a certain frequency, this is what we use for the sinogram
+        if kernelSize is not None:
+            InitialSignal.smoothout(kernelSize)
+            FinalSignal.smoothout(kernelSize)
+        freqs = np.fft.rfftfreq(FinalSignal.length, 1/FinalSignal.samplerate)
+        desiredFreqIndex = np.searchsorted(freqs,desiredFreq,side="right") #Find the first index where the freq is greater than the desired frequency
+        atten = AttenCalculators.EstTransferFunction(InitialSignal,FinalSignal,useWindow)
+        atten = atten[desiredFreqIndex]
+        T = np.abs(atten)**2 #Power transmission
+        A = -np.log(T+1e-12) #Linear attenuation somehow
+        return A # Don't need to do these because we're doing it at one frequency 
+        if useWindow:
+            fft_in = InitialSignal.windowFFT
+        else:
+            fft_in = InitialSignal.rawFFT
+        
+        #weights = np.abs(fft_in)**2 #Weighting by the magnitude of the input signal at each frequency)
+        #A_scalar = np.sum(A * weights) / np.sum(weights) #Weighted average of the attenuation across frequencies
+        
+        
   
 def correlate_soundfiles(sound1:Soundfile,sound2:Soundfile): #This takes two soundfile objects and does its best to align them, trying to make the signal start at the same time more precisely than a human could
     correlation = correlate(in1 = sound2.soundfile,in2 = sound1.soundfile,mode="full",method="auto") #Chat describes it as basically sliding a signal against another one and comparing them 

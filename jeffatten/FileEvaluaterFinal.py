@@ -7,7 +7,9 @@ from scipy.signal import medfilt
 import os
 import re
 from PIL import Image
+import rayVisualization as rv #TODO: make this actually refer to the one in Jesus' Work 
 
+os.chdir("jeffatten") #Change to the folder that holds the files, should be jeffatten
 
 print(f"Current working dir:{os.getcwd()}, should be in jeffatten folder")
 #The goal of this script is to take the files from the Second Scan, thus the audio files in 'SecondScan'
@@ -34,6 +36,7 @@ for i in ["A","B","C","D","E","F"]:
 
 
 attenuations = []
+ScalebyRows = False #Whether to scale attenuations by row, instead of the full image at once
 for filerange in matches:
     tempattenuations = []
     for file in filerange:
@@ -41,19 +44,28 @@ for filerange in matches:
         print(f"Currently processing {measurementfilename} at {folder+"/"+measurementfilename}")
         baseline = AL.Soundfile(sourceloudnessfile) #Get the baseline object, making a new one each time because the correlate function changes the object
         measurement = AL.Soundfile(folder+"/"+measurementfilename) #Get the measurement file, should be A_00_X then A_01_X etc.
-        measurementatten = AL.calculate_attenuation_at_freq(baseline,measurement,precorrelated=False,filterafter=True,kernelsize=11,desiredfreq=2500) #Attenuation as function of freq
+        #measurementatten = AL.calculate_attenuation_at_freq(baseline,measurement,precorrelated=False,filterafter=True,kernelsize=11,desiredfreq=2500) #Attenuation as function of freq
+        measurementatten = AL.AttenCalculators.ScalarizeTransferFunction(baseline,measurement,desiredFreq=2500,useWindow=True,kernelSize=11) #Scalar attenuation value
         tempattenuations.append(measurementatten)
     print(attenuations)
-    tempattenuations = np.asarray(tempattenuations)
-    tempattenuations = -tempattenuations
-    p_low = np.percentile(tempattenuations, 25)
-    p_high = np.percentile(tempattenuations, 75)
-    scaled = 255 * (tempattenuations - p_low) / (p_high - p_low)
-    scaled = np.clip(scaled, 0, 255).astype(np.uint8)
-    attenuations.extend(scaled)
+    if ScalebyRows:
+        tempattenuations = np.asarray(tempattenuations)
+        tempattenuations = -tempattenuations
+        p_low = np.percentile(tempattenuations, 25)
+        p_high = np.percentile(tempattenuations, 75)
+        scaled = 255 * (tempattenuations - p_low) / (p_high - p_low)
+        scaled = np.clip(scaled, 0, 255).astype(np.uint8)
+        attenuations.extend(scaled)
+    else:
+        attenuations.extend(tempattenuations)
 attenuations = np.asarray(attenuations)
-outputimage = Image.fromarray(np.abs(attenuations.astype(np.int8)), "L")
-outputimage.save("Hi.bmp")
-
-
-np.save(f"Attenuations_{scanningletter}4.npy",attenuations) #Saves for use in reconstruction
+if not ScalebyRows:
+    lo = np.percentile(attenuations, 25)
+    hi = np.percentile(attenuations, 75)
+    scaled = 255 * (attenuations - lo) / (hi - lo)
+    scaled = np.clip(scaled, 0, 255).astype(np.uint8)
+    attenuations = scaled
+savename = f"Attenuations_{scanningletter}4.npy"
+rv.MakeSinogram(attenuations,f"OutputStorage/Sinograms/{savename}.bmp",6,13) #Makes and saves the sinogram as a bmp 
+np.save(f"OutputStorage/NumpyArrays/{savename}", attenuations) #Saves for use in reconstruction
+print(f"Done, saved as OutputStorage/NumpyArrays/{savename}")
