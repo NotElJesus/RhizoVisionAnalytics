@@ -21,6 +21,7 @@ class Soundfile:
         self.fft = None #Added later in the process
         self.freq = None
         self.isCorrelated = False
+        self.kernelSize = None #Filtering is optional, if kernelSize is not None then it applies a median filter to the fft with the given kernel size, which is how many cells it averages over, must be odd
     def save(self,path:str):
         sf.write(path,self.soundfile,self.samplerate) 
     def getmag(self):
@@ -29,8 +30,6 @@ class Soundfile:
         return 20*np.log10(np.abs(self.fft))
     def bandpassFilter(self,lowcut,highcut,order=5): #Runs the filter on itself
         self.soundfile = butter_bandpass_filter(self.soundfile, lowcut, highcut, self.samplerate, order)
-    def smoothout(self,kernelsize=101): #Smooths out the signal
-        self.soundfile = medfilt(self.soundfile, kernel_size=kernelsize)
     @property
     def correlated(self):
         return self.isCorrelated
@@ -39,12 +38,21 @@ class Soundfile:
         return len(self.soundfile)
     @property
     def rawFFT(self):
-        return np.fft.rfft(self.soundfile)
+        fft = np.fft.rfft(self.soundfile)
+        if self.kernelSize is not None:
+            fft = medfilt(np.abs(fft), kernel_size=self.kernelSize)
+        return fft
+    @property
+    def freqs(self):
+        return np.fft.rfftfreq(self.length, 1/self.samplerate)
     @property
     def windowFFT(self):
         N = self.length
         window = np.hanning(N)
-        return np.fft.rfft(self.soundfile*window)/N
+        fft = np.fft.rfft(self.soundfile*window)/N
+        if self.kernelSize is not None:
+            fft = medfilt(np.abs(fft), kernel_size=self.kernelSize)
+        return fft
 class Sinogram:
     def __init__(self,sourceFile:Soundfile,receiverFiles:list[Soundfile],silenceCapsLengths:float=1):
         self.sourceAudio:Soundfile = sourceFile #This is the audio file of the source
