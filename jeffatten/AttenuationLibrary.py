@@ -53,6 +53,7 @@ class Soundfile:
         if self.kernelSize is not None:
             fft = medfilt(np.abs(fft), kernel_size=self.kernelSize)
         return fft
+# These sinogram classes are unused I think 
 class Sinogram:
     def __init__(self,sourceFile:Soundfile,receiverFiles:list[Soundfile],silenceCapsLengths:float=1):
         self.sourceAudio:Soundfile = sourceFile #This is the audio file of the source
@@ -103,17 +104,21 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
         eps = 1e-12 #To avoid division by zero
         atten = fft_final * np.conj(fft_in) / (np.abs(fft_in)**2 + eps)
         return atten
+<<<<<<< Updated upstream
     def ScalarizeTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,desiredFreq:float,useWindow:bool=False,kernelSize:int=None): #This takes the transfer function and scalarizes it to a single value, which is the attenuation at a certain frequency, this is what we use for the sinogram
         if kernelSize is not None:
             InitialSignal.kernelSize = kernelSize
             FinalSignal.kernelSize = kernelSize
         if not InitialSignal.correlated or not FinalSignal.correlated:
             correlate_soundfiles(InitialSignal,FinalSignal)
+=======
+    def ScalarizeTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,desiredFreq:float,useWindow:bool=False,sampleWindow=512): #This takes the transfer function and scalarizes it to a single value, which is the attenuation at a certain frequency, this is what we use for the sinogram
+>>>>>>> Stashed changes
         freqs = np.fft.rfftfreq(FinalSignal.length, 1/FinalSignal.samplerate)
         desiredFreqIndex = np.searchsorted(freqs,desiredFreq,side="right") #Find the first index where the freq is greater than the desired frequency
         desiredFreqIndex = min(desiredFreqIndex, len(freqs) - 1)
         atten = AttenCalculators.EstTransferFunction(InitialSignal,FinalSignal,useWindow)
-        atten = atten[desiredFreqIndex]
+        atten = np.max(atten[desiredFreqIndex-sampleWindow//2:desiredFreqIndex+sampleWindow//2]) #Take the max value in a small window around the desired frequency to account for any slight shifts in frequency, this is a bit of a hack but it seems to work better than just taking the value at the exact frequency, which can be very noisy
         T = np.abs(atten)**2 #Power transmission
         A = -np.log(T+1e-12) #Linear attenuation somehow
         return A # Don't need to do these because we're doing it at one frequency 
