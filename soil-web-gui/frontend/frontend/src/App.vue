@@ -25,7 +25,7 @@
         <p class="eyebrow">SOIL ROOT IMAGING PLATFORM</p>
         <h1>RhizoVisionAnalytics</h1>
         <p class="subtitle">
-          Upload a source image, run the reconstruction pipeline, and inspect the generated result.
+          Upload a source image or audio scan files, run the reconstruction pipeline, and inspect the generated result.
         </p>
 
         <button class="primary-btn" type="button" @click="currentPage = 'run'">
@@ -46,11 +46,44 @@
 
         <div class="run-grid">
           <form class="panel" @submit.prevent="submitForm">
-            <label class="upload-box">
+            <div class="mode-switch">
+              <button
+                class="mode-btn"
+                :class="{ active: runMode === 'image' }"
+                type="button"
+                @click="runMode = 'image'"
+              >
+                Image Simulation
+              </button>
+              <button
+                class="mode-btn"
+                :class="{ active: runMode === 'audio' }"
+                type="button"
+                @click="runMode = 'audio'"
+              >
+                Audio Scan
+              </button>
+            </div>
+
+            <label v-if="runMode === 'image'" class="upload-box">
               <span>Choose Image</span>
-              <input type="file" accept="image/*" @change="handleFileChange" />
-              <strong>{{ selectedFile ? selectedFile.name : 'No file selected' }}</strong>
+              <input type="file" accept="image/*" @change="handleImageChange" />
+              <strong>{{ selectedImage ? selectedImage.name : 'No file selected' }}</strong>
             </label>
+
+            <div v-else class="audio-upload-grid">
+              <label class="upload-box">
+                <span>Baseline / Touching WAV</span>
+                <input type="file" accept="audio/*,.wav" @change="handleBaselineChange" />
+                <strong>{{ baselineFile ? baselineFile.name : 'No baseline selected' }}</strong>
+              </label>
+
+              <label class="upload-box">
+                <span>Measurement WAV Files</span>
+                <input type="file" accept="audio/*,.wav" multiple @change="handleMeasurementsChange" />
+                <strong>{{ measurementFiles.length }} files selected</strong>
+              </label>
+            </div>
 
             <div class="form-grid">
               <label class="form-group">
@@ -77,6 +110,33 @@
                 <span>Fan Angle Degrees</span>
                 <input v-model.number="form.fan_angle_degrees" min="1" step="0.1" type="number" />
               </label>
+
+              <template v-if="runMode === 'audio'">
+                <label class="form-group">
+                  <span>Rotations</span>
+                  <input v-model.number="audioForm.rotations" min="1" type="number" />
+                </label>
+
+                <label class="form-group">
+                  <span>Target Frequency</span>
+                  <input v-model.number="audioForm.desired_freq" min="1" step="0.1" type="number" />
+                </label>
+
+                <label class="form-group">
+                  <span>Kernel Size</span>
+                  <input v-model.number="audioForm.kernel_size" min="1" step="2" type="number" />
+                </label>
+
+                <label class="check-row">
+                  <input v-model="audioForm.use_window" type="checkbox" />
+                  <span>Use Hanning window</span>
+                </label>
+
+                <label class="check-row">
+                  <input v-model="audioForm.scale_by_rows" type="checkbox" />
+                  <span>Scale by rows</span>
+                </label>
+              </template>
             </div>
 
             <button class="primary-btn wide" type="submit" :disabled="isRunning">
@@ -95,6 +155,12 @@
               <a :href="outputImageUrl" target="_blank" rel="noopener noreferrer" class="secondary-btn">
                 Open Full Image
               </a>
+              <div v-if="sinogramImageUrl" class="sinogram-preview">
+                <img :src="sinogramImageUrl" alt="Sinogram Output" class="sinogram-image" />
+                <a :href="sinogramImageUrl" target="_blank" rel="noopener noreferrer" class="secondary-btn">
+                  Open Sinogram
+                </a>
+              </div>
             </div>
 
             <div v-else class="empty-state">
@@ -138,6 +204,8 @@
               <p><strong>Source:</strong> {{ item.params.sourceloc }}</p>
               <p><strong>Detectors:</strong> {{ item.params.detectors }}</p>
               <p><strong>Fan Angle:</strong> {{ item.params.fan_angle_degrees }}</p>
+              <p v-if="item.params.rotations"><strong>Rotations:</strong> {{ item.params.rotations }}</p>
+              <p v-if="item.params.desired_freq"><strong>Freq:</strong> {{ item.params.desired_freq }}</p>
             </div>
 
             <a v-if="item.output_url" :href="item.output_url" target="_blank" rel="noopener noreferrer">
@@ -163,11 +231,15 @@ const pages = [
 ]
 
 const currentPage = ref('home')
-const selectedFile = ref(null)
+const runMode = ref('image')
+const selectedImage = ref(null)
+const baselineFile = ref(null)
+const measurementFiles = ref([])
 const responseData = ref(null)
 const errorMessage = ref('')
 const historyRecords = ref([])
 const outputImageUrl = ref('')
+const sinogramImageUrl = ref('')
 const isRunning = ref(false)
 
 const form = ref({
@@ -176,6 +248,14 @@ const form = ref({
   sourceloc: 30,
   detectors: 55,
   fan_angle_degrees: 80
+})
+
+const audioForm = ref({
+  rotations: 6,
+  desired_freq: 2500,
+  kernel_size: 11,
+  use_window: true,
+  scale_by_rows: false
 })
 
 const responseText = computed(() => {
@@ -194,9 +274,11 @@ const persistHistory = () => {
 const saveHistoryRecord = (result) => {
   historyRecords.value.unshift({
     filename: result.filename,
+    mode: runMode.value,
     time: new Date().toLocaleString(),
     params: result.params,
-    output_url: result.output_url
+    output_url: result.output_url,
+    sinogram_url: result.sinogram_url
   })
   persistHistory()
 }
@@ -206,22 +288,37 @@ const clearHistory = () => {
   persistHistory()
 }
 
-const handleFileChange = (event) => {
-  selectedFile.value = event.target.files?.[0] || null
+const handleImageChange = (event) => {
+  selectedImage.value = event.target.files?.[0] || null
+}
+
+const handleBaselineChange = (event) => {
+  baselineFile.value = event.target.files?.[0] || null
+}
+
+const handleMeasurementsChange = (event) => {
+  measurementFiles.value = Array.from(event.target.files || [])
 }
 
 const submitForm = async () => {
   errorMessage.value = ''
   responseData.value = null
   outputImageUrl.value = ''
+  sinogramImageUrl.value = ''
 
-  if (!selectedFile.value) {
+  // Route the shared form controls to the selected reconstruction pipeline.
+  if (runMode.value === 'audio') {
+    await submitAudioForm()
+    return
+  }
+
+  if (!selectedImage.value) {
     errorMessage.value = 'Please select an image before running.'
     return
   }
 
   const formData = new FormData()
-  formData.append('image', selectedFile.value)
+  formData.append('image', selectedImage.value)
   formData.append('reconstruction_width', form.value.reconstruction_width)
   formData.append('iterations', form.value.iterations)
   formData.append('sourceloc', form.value.sourceloc)
@@ -234,6 +331,58 @@ const submitForm = async () => {
     const res = await axios.post(`${API_BASE_URL}/run`, formData)
     responseData.value = res.data
     outputImageUrl.value = res.data.output_url || ''
+    sinogramImageUrl.value = res.data.sinogram_url || ''
+    saveHistoryRecord(res.data)
+  } catch (err) {
+    const detail = err.response?.data?.detail || err.response?.data?.message || err.message
+    errorMessage.value = detail
+  } finally {
+    isRunning.value = false
+  }
+}
+
+const submitAudioForm = async () => {
+  if (!baselineFile.value) {
+    errorMessage.value = 'Please select a baseline WAV before running.'
+    return
+  }
+
+  if (measurementFiles.value.length === 0) {
+    errorMessage.value = 'Please select measurement WAV files before running.'
+    return
+  }
+
+  const expectedFiles = audioForm.value.rotations * form.value.detectors
+  if (measurementFiles.value.length !== expectedFiles) {
+    errorMessage.value = `Expected ${expectedFiles} measurement files, got ${measurementFiles.value.length}.`
+    return
+  }
+
+  const formData = new FormData()
+  formData.append('baseline', baselineFile.value)
+  // Keep the browser upload order deterministic for scan rows and detectors.
+  measurementFiles.value
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
+    .forEach((file) => formData.append('measurements', file))
+  formData.append('reconstruction_width', form.value.reconstruction_width)
+  formData.append('iterations', form.value.iterations)
+  formData.append('sourceloc', form.value.sourceloc)
+  formData.append('detectors', form.value.detectors)
+  formData.append('fan_angle_degrees', form.value.fan_angle_degrees)
+  formData.append('rotations', audioForm.value.rotations)
+  formData.append('desired_freq', audioForm.value.desired_freq)
+  formData.append('kernel_size', audioForm.value.kernel_size)
+  formData.append('use_window', audioForm.value.use_window)
+  formData.append('scale_by_rows', audioForm.value.scale_by_rows)
+
+  isRunning.value = true
+
+  try {
+    const res = await axios.post(`${API_BASE_URL}/run-audio`, formData)
+    responseData.value = res.data
+    outputImageUrl.value = res.data.output_url || ''
+    sinogramImageUrl.value = res.data.sinogram_url || ''
     saveHistoryRecord(res.data)
   } catch (err) {
     const detail = err.response?.data?.detail || err.response?.data?.message || err.message
@@ -398,6 +547,29 @@ h2 {
   margin-top: 22px;
 }
 
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.mode-btn {
+  border: 1px solid #cdd9d2;
+  border-radius: 8px;
+  background: white;
+  color: #31453d;
+  cursor: pointer;
+  font-weight: 800;
+  padding: 10px 12px;
+}
+
+.mode-btn.active {
+  border-color: #275d4d;
+  background: #275d4d;
+  color: white;
+}
+
 .panel,
 .history-item,
 .response-panel {
@@ -426,6 +598,11 @@ h2 {
   max-width: 100%;
 }
 
+.audio-upload-grid {
+  display: grid;
+  gap: 12px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -444,6 +621,19 @@ input {
   background: white;
   padding: 11px 12px;
   color: #18231f;
+}
+
+input[type='checkbox'] {
+  width: auto;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 45px;
+  color: #31453d;
+  font-weight: 750;
 }
 
 input:focus {
@@ -497,6 +687,21 @@ input:focus {
   aspect-ratio: 1;
   object-fit: contain;
   margin: 0 auto 16px;
+  border: 1px solid #d7e2da;
+  border-radius: 8px;
+  background: white;
+}
+
+.sinogram-preview {
+  margin-top: 18px;
+}
+
+.sinogram-image {
+  display: block;
+  width: min(100%, 260px);
+  max-height: 150px;
+  object-fit: contain;
+  margin: 0 auto 12px;
   border: 1px solid #d7e2da;
   border-radius: 8px;
   background: white;
@@ -588,7 +793,8 @@ input:focus {
 
   .run-grid,
   .form-grid,
-  .history-grid {
+  .history-grid,
+  .mode-switch {
     grid-template-columns: 1fr;
   }
 

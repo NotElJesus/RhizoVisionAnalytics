@@ -105,10 +105,13 @@ class AttenCalculators: #These calculate the attenuation over the entire frequen
         return atten
     def ScalarizeTransferFunction(InitialSignal:Soundfile,FinalSignal:Soundfile,desiredFreq:float,useWindow:bool=False,kernelSize:int=None): #This takes the transfer function and scalarizes it to a single value, which is the attenuation at a certain frequency, this is what we use for the sinogram
         if kernelSize is not None:
-            InitialSignal.smoothout(kernelSize)
-            FinalSignal.smoothout(kernelSize)
+            InitialSignal.kernelSize = kernelSize
+            FinalSignal.kernelSize = kernelSize
+        if not InitialSignal.correlated or not FinalSignal.correlated:
+            correlate_soundfiles(InitialSignal,FinalSignal)
         freqs = np.fft.rfftfreq(FinalSignal.length, 1/FinalSignal.samplerate)
         desiredFreqIndex = np.searchsorted(freqs,desiredFreq,side="right") #Find the first index where the freq is greater than the desired frequency
+        desiredFreqIndex = min(desiredFreqIndex, len(freqs) - 1)
         atten = AttenCalculators.EstTransferFunction(InitialSignal,FinalSignal,useWindow)
         atten = atten[desiredFreqIndex]
         T = np.abs(atten)**2 #Power transmission
