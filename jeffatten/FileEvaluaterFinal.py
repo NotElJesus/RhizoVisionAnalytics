@@ -44,9 +44,14 @@ for filerange in matches:
         print(f"Currently processing {measurementfilename} at {folder+"/"+measurementfilename}")
         baseline = AL.Soundfile(sourceloudnessfile) #Get the baseline object, making a new one each time because the correlate function changes the object
         measurement = AL.Soundfile(folder+"/"+measurementfilename) #Get the measurement file, should be A_00_X then A_01_X etc.
+        baseline.kernelSize = 501
+        measurement.kernelSize = 501
+        #plt.semilogx(measurement.freqs, 20*np.log10(np.abs(measurement.rawFFT)), label=file)
         #measurementatten = AL.calculate_attenuation_at_freq(baseline,measurement,precorrelated=False,filterafter=True,kernelsize=11,desiredfreq=2500) #Attenuation as function of freq
-        measurementatten = AL.AttenCalculators.ScalarizeTransferFunction(baseline,measurement,desiredFreq=2500,useWindow=True,kernelSize=11) #Scalar attenuation value
+        measurementatten = AL.AttenCalculators.ScalarizeTransferFunction(baseline,measurement,desiredFreq=2500,useWindow=True) #Scalar attenuation value
         tempattenuations.append(measurementatten)
+    #plt.legend()
+    #plt.show()
     print(attenuations)
     if ScalebyRows:
         tempattenuations = np.asarray(tempattenuations)
@@ -55,16 +60,17 @@ for filerange in matches:
         p_high = np.percentile(tempattenuations, 75)
         scaled = 255 * (tempattenuations - p_low) / (p_high - p_low)
         scaled = np.clip(scaled, 0, 255).astype(np.uint8)
-        attenuations.extend(scaled)
+        attenuations.extend(scaled**0.7) #A little contrast boost
     else:
         attenuations.extend(tempattenuations)
 attenuations = np.asarray(attenuations)
 if not ScalebyRows:
-    lo = np.percentile(attenuations, 25)
-    hi = np.percentile(attenuations, 75)
+    attenuations = -attenuations
+    lo = np.percentile(attenuations, 10)
+    hi = np.percentile(attenuations, 90)
     scaled = 255 * (attenuations - lo) / (hi - lo)
     scaled = np.clip(scaled, 0, 255).astype(np.uint8)
-    attenuations = scaled
+    attenuations = scaled**0.7 #Contrast boosting here 
 savename = f"Attenuations_{scanningletter}4.npy"
 rv.MakeSinogram(attenuations,f"OutputStorage/Sinograms/{savename}.bmp",6,13) #Makes and saves the sinogram as a bmp 
 np.save(f"OutputStorage/NumpyArrays/{savename}", attenuations) #Saves for use in reconstruction
