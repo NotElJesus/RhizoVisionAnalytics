@@ -77,8 +77,9 @@ def scalarize_transfer_function(
     desired_freq,
     use_window=True,
     kernel_size=11,
+    sample_window=512,
 ):
-    # Convert the transfer function at one target frequency into a single projection value.
+    # Convert the strongest transfer response near one target frequency into a projection value.
     if kernel_size is not None:
         initial_signal.kernel_size = kernel_size
         final_signal.kernel_size = kernel_size
@@ -94,7 +95,13 @@ def scalarize_transfer_function(
 
     eps = 1e-12
     transfer = fft_final * np.conj(fft_in) / (np.abs(fft_in) ** 2 + eps)
-    transmission = np.abs(transfer[desired_index]) ** 2
+    half_window = max(1, sample_window) // 2
+    window_start = max(0, desired_index - half_window)
+    window_end = min(len(transfer), desired_index + half_window)
+    if window_end <= window_start:
+        window_end = min(len(transfer), window_start + 1)
+
+    transmission = np.max(np.abs(transfer[window_start:window_end])) ** 2
     return float(-np.log(transmission + eps))
 
 
@@ -135,6 +142,7 @@ def measurements_to_p_vector(
     desired_freq=2500,
     use_window=True,
     kernel_size=11,
+    sample_window=512,
     rotations=6,
     detectors=13,
     scale_by_rows=False,
@@ -151,6 +159,7 @@ def measurements_to_p_vector(
                 desired_freq=desired_freq,
                 use_window=use_window,
                 kernel_size=kernel_size,
+                sample_window=sample_window,
             )
         )
 

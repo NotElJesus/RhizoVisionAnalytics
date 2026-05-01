@@ -147,6 +147,7 @@ async def run_audio_scan(
     rotations: int = Form(...),
     desired_freq: float = Form(2500),
     kernel_size: int = Form(11),
+    sample_window: int = Form(512),
     use_window: bool = Form(True),
     scale_by_rows: bool = Form(False),
 ):
@@ -167,6 +168,8 @@ async def run_audio_scan(
         raise HTTPException(status_code=400, detail="desired_freq must be greater than 0")
     if kernel_size <= 0 or kernel_size % 2 == 0:
         raise HTTPException(status_code=400, detail="kernel_size must be a positive odd integer")
+    if sample_window <= 0:
+        raise HTTPException(status_code=400, detail="sample_window must be greater than 0")
     if len(measurements) != rotations * detectors:
         raise HTTPException(
             status_code=400,
@@ -190,6 +193,7 @@ async def run_audio_scan(
             kernel_size=kernel_size,
             use_window=use_window,
             scale_by_rows=scale_by_rows,
+            sample_window=sample_window,
             output_basename=Path(baseline_path).stem,
         )
     except Exception as exc:
@@ -219,6 +223,7 @@ async def run_audio_scan(
             "rotations": rotations,
             "desired_freq": desired_freq,
             "kernel_size": kernel_size,
+            "sample_window": sample_window,
             "use_window": use_window,
             "scale_by_rows": scale_by_rows,
         },

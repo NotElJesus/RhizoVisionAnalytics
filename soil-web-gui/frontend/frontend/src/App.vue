@@ -127,6 +127,11 @@
                   <input v-model.number="audioForm.kernel_size" min="1" step="2" type="number" />
                 </label>
 
+                <label class="form-group">
+                  <span>Sample Window</span>
+                  <input v-model.number="audioForm.sample_window" min="1" type="number" />
+                </label>
+
                 <label class="check-row">
                   <input v-model="audioForm.use_window" type="checkbox" />
                   <span>Use Hanning window</span>
@@ -206,6 +211,7 @@
               <p><strong>Fan Angle:</strong> {{ item.params.fan_angle_degrees }}</p>
               <p v-if="item.params.rotations"><strong>Rotations:</strong> {{ item.params.rotations }}</p>
               <p v-if="item.params.desired_freq"><strong>Freq:</strong> {{ item.params.desired_freq }}</p>
+              <p v-if="item.params.sample_window"><strong>Window:</strong> {{ item.params.sample_window }}</p>
             </div>
 
             <a v-if="item.output_url" :href="item.output_url" target="_blank" rel="noopener noreferrer">
@@ -254,6 +260,7 @@ const audioForm = ref({
   rotations: 6,
   desired_freq: 2500,
   kernel_size: 11,
+  sample_window: 512,
   use_window: true,
   scale_by_rows: false
 })
@@ -373,6 +380,7 @@ const submitAudioForm = async () => {
   formData.append('rotations', audioForm.value.rotations)
   formData.append('desired_freq', audioForm.value.desired_freq)
   formData.append('kernel_size', audioForm.value.kernel_size)
+  formData.append('sample_window', audioForm.value.sample_window)
   formData.append('use_window', audioForm.value.use_window)
   formData.append('scale_by_rows', audioForm.value.scale_by_rows)
 
