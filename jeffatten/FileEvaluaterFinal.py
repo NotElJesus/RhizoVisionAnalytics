@@ -18,7 +18,7 @@ print(f"Current working dir:{os.getcwd()}, should be in jeffatten folder")
 #Take the attenuation, a higher attenuation means more stuff in between so it should be whiter in the sinogram than the other ones
 
 folder = "SecondScan/Outputs" #Name of folder that holds the files
-scanningletter = "K"
+scanningletter = "J"
 sourceloudnessfile = f"SecondScan/Outputs/Touchingagain_12_{scanningletter}.wav" #Name of the file that is recorded right ontop of the piezo, usually called touching
 
 
@@ -44,14 +44,20 @@ for filerange in matches:
         print(f"Currently processing {measurementfilename} at {folder+"/"+measurementfilename}")
         baseline = AL.Soundfile(sourceloudnessfile) #Get the baseline object, making a new one each time because the correlate function changes the object
         measurement = AL.Soundfile(folder+"/"+measurementfilename) #Get the measurement file, should be A_00_X then A_01_X etc.
-        baseline.kernelSize = 501
-        measurement.kernelSize = 501
-        #plt.semilogx(measurement.freqs, 20*np.log10(np.abs(measurement.rawFFT)), label=file)
+        baseline.kernelSize = 51
+        measurement.kernelSize = 51
+        measurement.bandpassFilter(2000,3000) #Bandpass filter to try to get rid of noise, should be around the 2.5 kHz signal
+        baseline.bandpassFilter(2000,3000)
+        mag = 20*np.log10(np.abs(measurement.rawFFT))
+        desiredFreqIndex = np.searchsorted(measurement.freqs,0.1,side="right")
+        offset = -mag[desiredFreqIndex] 
+        plt.semilogx(measurement.freqs,mag+offset, label=file)
         #measurementatten = AL.calculate_attenuation_at_freq(baseline,measurement,precorrelated=False,filterafter=True,kernelsize=11,desiredfreq=2500) #Attenuation as function of freq
         measurementatten = AL.AttenCalculators.ScalarizeTransferFunction(baseline,measurement,desiredFreq=2500,useWindow=True) #Scalar attenuation value
         tempattenuations.append(measurementatten)
-    #plt.legend()
-    #plt.show()
+    
+    plt.legend()
+    plt.show()
     print(attenuations)
     if ScalebyRows:
         tempattenuations = np.asarray(tempattenuations)
